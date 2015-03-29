@@ -1155,6 +1155,9 @@ static inline void validate_desc(struct hnae_rb_desc *desc, int start, int end) 
 	}
 }
 
+void hns_ethtool_set_ops(struct net_device *ndev)
+{}
+
 void testcase_test_hns_nic_net_xmit_hw(void)
 {
 	struct net_device ndev;
