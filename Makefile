@@ -1,12 +1,13 @@
 TARGET_DIR=../htsat_kernel/drivers/net/ethernet/hisilicon/
 CFLAGS=-O0 -g -I general_stub -I $(TARGET_DIR) 
+COMM_FILES=ut.c comm.h
 
 all: hns_enet.ut hnae.ut
 
-hns_enet.ut: hns_enet.ut.c $(TARGET_DIR)/hns_enet.c ut.c
+hns_enet.ut: hns_enet.ut.c $(TARGET_DIR)/hns_enet.c $(COMM_FILES)
 	$(CC) $(CFLAGS) $< -o $@
 
-hnae.ut: hnae.ut.c $(TARGET_DIR)/hnae.c ut.c
+hnae.ut: hnae.ut.c $(TARGET_DIR)/hnae.c $(COMM_FILES)
 	$(CC) $(CFLAGS) $< -o $@
 
 test: all

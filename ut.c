@@ -40,3 +40,5 @@ void ut_assert_func(char * f, int line, int cond, const char *fmt, ...) {
 	}
 	va_end(args);
 }
+
+int testcase = 0;

@@ -1,3 +1,13 @@
 1. if you need a debug time printk, it may means you need a log in the final code, please
 consider this
-2. 
+2. why the platform name is hip05? 
+3. 
+
+to chenqi:
+
+1. header file is for share, not for definition
+2. 1 HZ timer? too quick
+3. I don't think it will need a adaptor. If it do, you should bind it into
+dsaf.
+4. don't do extra design for unknown goal
+5. please make sure to pass compilation for every push
