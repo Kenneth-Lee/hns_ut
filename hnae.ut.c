@@ -22,9 +22,12 @@ static int dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
 }
 
 static void *kzalloc(size_t size, int flags) {
-	return NULL;
+	return malloc(size);
 }
-void kfree(const void *objp){}
+void kfree(void *objp){
+	free(objp);
+}
+
 struct class *class_create(void *mod, const char *name) {
 	return NULL;
 }
@@ -32,29 +35,88 @@ struct class *class_create(void *mod, const char *name) {
 void class_destroy(struct class *cls) {}
 #define spin_lock_irqsave(v1, v2)
 #define spin_unlock_irqrestore(v1, v2)
-#define list_add_tail_rcu(v1, v2)
-#define list_for_each_entry_rcu(v1, v2, v3)
-#define list_del_rcu(v1)
 
-#define IS_ERR(ptr) 1
 static inline long PTR_ERR(const void *ptr)
 {
-	        return (long) ptr;
+	return (long) ptr;
+}
+static inline bool IS_ERR(const void *ptr)
+{
+	return 0;
 }
 
+static inline void * ERR_PTR(long error)
+{
+	return (void *) error;
+}
 
 #include "hnae.c"
 
-//testcase----------------------------------
-void testcase1(void)
+struct hnae_ae_dev ae_dev;
+struct hnae_handle1 {
+	struct hnae_handle head;
+	struct hnae_queue qs[10];
+} _handle1 = {
+	.head.q_num = 10,
+};
+
+#define list_del_rcu(v1)
+
+
+struct hnae_handle *_get_handle(struct hnae_ae_dev *dev, const char *opts,
+			                struct hnae_rb_buf_ops *ops) {
+	return (struct hnae_handle *)&_handle1;
+}
+
+void _put_handle(struct hnae_handle *handle) {
+}
+
+struct hnae_ae_ops ops = {
+	.get_handle = _get_handle,
+	.put_handle = _put_handle,
+};
+struct hnae_ae_dev ae_dev =
 {
+	.dev = NULL,
+	.ops = &ops,
+	.name = "ae_id",
+	.use_count = 0,
+};
+
+static int _alloc_buffer(struct hnae_handle *handle,
+	struct hnae_ring *ring, struct hnae_rb_desc_cb *cb)
+{
+	return 0;
+}
+
+void _free_buffer(struct hnae_handle *handle,
+	struct hnae_ring *ring, struct hnae_rb_desc_cb *cb)
+{
+}
+struct hnae_rb_buf_ops _bops = {
+	.alloc_buffer = _alloc_buffer,
+	.free_buffer = _free_buffer,
+};
+
+//testcase----------------------------------
+void test_get_put_handle(void)
+{
+	struct hnae_handle *h;
+	int ret;
+
 	testcase = 101;
-	ut_assert(0);
+
+	ret = hnae_ae_register(&ae_dev);
+	ut_assert(!ret);
+	h = hnae_get_handle(NULL, "ae_id", "ad_opts", &_bops);
+	ut_assert(h);
+	hnae_put_handle(h);
+	hnae_ae_unregister(&ae_dev);
 }
 
 //------------------------------------------
 int main(void) {
-	testcase1();
+	test_get_put_handle();
 	return 0;
 }
 

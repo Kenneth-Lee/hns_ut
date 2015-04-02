@@ -56,9 +56,45 @@ typedef enum netdev_tx netdev_tx_t;
 
 unsigned long jiffies;
 
+//-------real list stub----------------------
 struct list_head {
 	        struct list_head *next, *prev;
 };
+
+#define LIST_HEAD_INIT(name) { &(name), &(name) }
+
+#define LIST_HEAD(name) \
+		struct list_head name = LIST_HEAD_INIT(name)
+
+static inline void INIT_LIST_HEAD(struct list_head *list)
+{
+		list->next = list;
+			list->prev = list;
+}
+
+
+#define list_entry(ptr, type, member) \
+	        container_of(ptr, type, member)
+#define list_first_entry(ptr, type, member) \
+	list_entry((ptr)->next, type, member)
+#define list_next_entry(pos, member) \
+	list_entry((pos)->member.next, typeof(*(pos)), member)
+#define list_for_each_entry_rcu(pos, head, member)				\
+	for (pos = list_first_entry(head, typeof(*pos), member);	\
+	     &pos->member != (head);					\
+	     pos = list_next_entry(pos, member))
+static inline void list_del_rcu(struct list_head * entry)
+{
+	entry->prev->next = entry->next;
+	entry->next->prev = entry->prev;
+}
+static inline void list_add_tail_rcu(struct list_head *new, struct list_head *head) {
+	new->next = head;
+	new->prev = head->prev;
+	head->prev->next = new;
+	head->prev = new;
+}
+
 
 struct hlist_node {};
 struct ifreq {};
@@ -848,22 +884,6 @@ int netdev_dbg(const struct net_device *dev, const char *fmt, ...)
 #define setup_timer(timer, fn, data)
 #define INIT_WORK(_work, _func)
 #define DEFINE_SPINLOCK(lock) int lock
-
-#define LIST_HEAD_INIT(name) { &(name), &(name) }
-
-#define LIST_HEAD(name) \
-		struct list_head name = LIST_HEAD_INIT(name)
-
-static inline void INIT_LIST_HEAD(struct list_head *list)
-{
-		list->next = list;
-			list->prev = list;
-}
-
-static inline void * ERR_PTR(long error)
-{
-	        return (void *) error;
-}
 
 struct dev_pm_ops {
 	int (*prepare)(struct device *dev);

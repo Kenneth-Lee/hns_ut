@@ -5,8 +5,8 @@
 #include <stdlib.h>
 #include <execinfo.h>
 #include <stdarg.h>
-#define ut_assert(cond) ut_assert_func(__FILE__, __LINE__, cond, "")
-#define ut_assert_str(cond, fmt, ...) ut_assert_func(__FILE__, __LINE__, cond, fmt, ##__VA_ARGS__)
+#define ut_assert(cond) ut_assert_func(__FILE__, __LINE__, !!(cond), "")
+#define ut_assert_str(cond, fmt, ...) ut_assert_func(__FILE__, __LINE__, !!(cond), fmt, ##__VA_ARGS__)
 
 
 #ifdef UT_DUMPSTACK
