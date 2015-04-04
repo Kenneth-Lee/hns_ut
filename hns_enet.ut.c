@@ -195,14 +195,6 @@ static int request_irq(unsigned int irq, irq_handler_t handler, unsigned long fl
 	return 0;
 }
 
-int IS_ERR(void *ptr) {
-	return 0;
-}
-
-int PTR_ERR(void *ptr) {
-	return 0;
-}
-
 int netif_set_real_num_tx_queues(struct net_device *dev, unsigned int txq) {
 	return 0;
 }
@@ -292,8 +284,8 @@ void *netdev_priv(struct net_device *ndev) {
 	
 	for(i=0; i<TEST_Q_NUM; i++) {
 		handle1->qs[i].handle = handle1;
-		handle1->qs[i].rx_ring = rx_ring1;
-		handle1->qs[i].tx_ring = tx_ring1;
+		handle1->qs[i].rx_ring = *rx_ring1;
+		handle1->qs[i].tx_ring = *tx_ring1;
 	}
 	return &priv1;
 }
