@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <execinfo.h>
 #include <stdarg.h>
+#include <setjmp.h>
+
 #define ut_assert(cond) ut_assert_func(__FILE__, __LINE__, !!(cond), "")
 #define ut_assert_str(cond, fmt, ...) ut_assert_func(__FILE__, __LINE__, !!(cond), fmt, ##__VA_ARGS__)
 
@@ -41,13 +43,30 @@ void ut_assert_func(char * f, int line, int cond, const char *fmt, ...) {
 	va_end(args);
 }
 
+void default_broken(int val) {
+	printf("broken from test (val=%d)\n", val);
+}
+
 int testcase = 0;
+jmp_buf jmpenv;
+void (*broken)(int val) = default_broken;
+
+static inline void testj(void (*test_func)(void)) {
+	if(setjmp(jmpenv)) {
+		broken(-1);
+	}else {
+		test_func();
+	}
+}
+#define ut_break(val) longjmp(jmpenv, val)
 
 #define test(tc, test_func) \
 	testcase = tc; \
 	printf("test %s(%d)...", #test_func, tc); \
-	test_func(); \
+	testj(test_func); \
 	printf("done\n");
+
+
 
 #define MAX_ERRNO	4095
 

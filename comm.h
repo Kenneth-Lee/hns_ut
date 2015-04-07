@@ -972,7 +972,5 @@ struct class {
 #define subsys_initcall(str)
 #define module_exit(str)
 
-#define BUG_ON(cond) ut_assert(!cond)
-
 
 #endif

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-make >/dev/null
+#make >/dev/null
 
 for i in `ls *.ut`
 do
@@ -13,5 +13,6 @@ do
 	fi
 done
 
-lcov -c -d . -o lcov.out 2>&1 > .lcov.log
-genhtml lcov.out 2>&1 >> .lcov.log
+mkdir -p out
+lcov -c -d . -o lcov.out 2>&1 |tee > lcov.log
+genhtml -o out lcov.out 2>&1 |tee >> lcov.log

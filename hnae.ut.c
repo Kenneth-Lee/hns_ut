@@ -36,12 +36,17 @@ void class_destroy(struct class *cls) {}
 #define spin_lock_irqsave(v1, v2)
 #define spin_unlock_irqrestore(v1, v2)
 
+void BUG_ON(cond) {
+	ut_assert(!cond);
+}
+
 #include "hnae.c"
 
+#define Q_NUM 10
 struct hnae_ae_dev ae_dev;
-struct hnae_queue qs[10];
+struct hnae_queue qs[Q_NUM];
 struct hnae_handle _handle = {
-	.q_num = 10,
+	.q_num = Q_NUM,
 	.qs = qs,
 };
 
@@ -73,15 +78,22 @@ struct hnae_ae_dev ae_dev =
 	.name = "ae_id",
 };
 
+#define BUF_SIZE 1024
+#define DESC_NUM 32
 static int _alloc_buffer(struct hnae_handle *handle,
 	struct hnae_ring *ring, struct hnae_rb_desc_cb *cb)
 {
+	cb->buf = cb->priv = malloc(ring->buf_size);
+	cb->length = ring->buf_size;
+	ut_assert(cb->buf);
 	return 0;
 }
 
 void _free_buffer(struct hnae_handle *handle,
 	struct hnae_ring *ring, struct hnae_rb_desc_cb *cb)
 {
+	ut_assert(cb->buf);
+	free(cb->buf);
 }
 struct hnae_rb_buf_ops _bops = {
 	.alloc_buffer = _alloc_buffer,
@@ -153,7 +165,14 @@ void case_register_ae(void)
 void case_get_put_handle(void)
 {
 	struct hnae_handle *h;
-	int ret;
+	int ret, i;
+
+	for(i=0; i<Q_NUM; i++) {
+		qs[i].tx_ring.buf_size = BUF_SIZE;
+		qs[i].tx_ring.desc_num = DESC_NUM;
+		qs[i].rx_ring.buf_size = BUF_SIZE;
+		qs[i].rx_ring.desc_num = DESC_NUM;
+	}
 
 	ret = hnae_ae_register(&ae_dev);
 	ut_assert(!ret);
@@ -183,4 +202,3 @@ int main(void) {
 	test(102, case_get_put_handle);
 	return 0;
 }
-
