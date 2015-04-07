@@ -13,18 +13,49 @@ static void dma_unmap_single(struct device *dev, dma_addr_t dma_addr,
 #define UNMAPPED_DMA 0x7f7f
 static dma_addr_t dma_map_single(struct device *dev, void *cpu_addr, size_t size,
                int dir) {
+	ut_assert(cpu_addr);
 	return MAPPED_DMA;
 }
 
+int tc111_dma_mapping = 0;
 static int dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
 {
+	ut_assert(dma_addr);
+	switch(testcase) {
+		case 111:
+			tc111_dma_mapping++;
+			if(tc111_dma_mapping==3)
+				return 1;
+	}
         return 0;
 }
 
+int tc110_mem_c = 0;
+int tc111_mem_c = 0;
 static void *kzalloc(size_t size, int flags) {
-	return malloc(size);
+	void *p;
+	switch(testcase) {
+		case 110:
+			tc110_mem_c++;
+			break;
+		case 111:
+			tc111_mem_c++;
+			break;
+	}
+	p = malloc(size);
+	bzero(p, size);
+	return p;
 }
+
 void kfree(void *objp){
+	switch(testcase) {
+		case 110:
+			tc110_mem_c--;
+			break;
+		case 111:
+			tc111_mem_c--;
+			break;
+	}
 	free(objp);
 }
 
@@ -42,7 +73,7 @@ void BUG_ON(cond) {
 
 #include "hnae.c"
 
-#define Q_NUM 10
+#define Q_NUM 4
 struct hnae_ae_dev ae_dev;
 struct hnae_queue qs[Q_NUM];
 struct hnae_handle _handle = {
@@ -79,7 +110,7 @@ struct hnae_ae_dev ae_dev =
 };
 
 #define BUF_SIZE 1024
-#define DESC_NUM 32
+#define DESC_NUM 5
 static int _alloc_buffer(struct hnae_handle *handle,
 	struct hnae_ring *ring, struct hnae_rb_desc_cb *cb)
 {
@@ -178,27 +209,34 @@ void case_get_put_handle(void)
 	ut_assert(!ret);
 
 	h = hnae_get_handle(NULL, "ae_idddd", "ae_opts", &_bops);
-	ut_assert(!h);
+	ut_assert(IS_ERR(h));
 	ut_assert(ae_dev.use_count == 0);
 
 	//test to pass
 	h = hnae_get_handle(NULL, "ae_id", "ae_opts", &_bops);
-	ut_assert(h);
+	ut_assert(!IS_ERR(h));
 	ut_assert_str(ae_dev.use_count == 1, "use_count=%d, should be 1\n", ae_dev.use_count);
 
 	hnae_put_handle(h);
 
 	ut_assert(!ae_dev.use_count);
 
-	//test to fail
-	//...
+	ut_assert(tc110_mem_c==0);
+
+
+	//test to fail: dma_map fail in the middle
+	testcase = 111;
+	h = hnae_get_handle(NULL, "ae_id", "ae_opts", &_bops);
+	ut_assert(IS_ERR(h));
+	ut_assert(ae_dev.use_count == 0);
+	ut_assert_str(tc111_mem_c==0, "tc111_mem_c=%d\n", tc111_mem_c);
 
 	hnae_ae_unregister(&ae_dev);
 }
 
 //------------------------------------------
 int main(void) {
-	test(101, case_register_ae);
-	test(102, case_get_put_handle);
+	test(100, case_register_ae);
+	test(110, case_get_put_handle);
 	return 0;
 }
