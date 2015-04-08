@@ -4,9 +4,11 @@
 #include <string.h>
 
 //stub--------------------------------------
+ut_cnt_def_range(111, 119, dma_map);
 static void dma_unmap_single(struct device *dev, dma_addr_t dma_addr,
                  size_t size, int dir)
 {
+	ut_cnt_sub_range(111, 119, dma_map);
 }
 
 #define MAPPED_DMA 0x8989
@@ -14,48 +16,50 @@ static void dma_unmap_single(struct device *dev, dma_addr_t dma_addr,
 static dma_addr_t dma_map_single(struct device *dev, void *cpu_addr, size_t size,
                int dir) {
 	ut_assert(cpu_addr);
+	ut_cnt_add_range(111, 119, dma_map);
 	return MAPPED_DMA;
 }
 
-int tc111_dma_mapping = 0;
+int tc111_dma_cnt = 0;
 static int dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
 {
 	ut_assert(dma_addr);
-	switch(testcase) {
-		case 111:
-			tc111_dma_mapping++;
-			if(tc111_dma_mapping==3)
-				return 1;
+
+
+	if(testcase==111) 
+		if(tc111_dma_cnt++==4) {
+			ut_cnt_sub_range(111, 119, dma_map);
+			return -1;
+		}
+
+	if(testcase==113) {
+		ut_cnt_sub_range(111, 119, dma_map);
+		return -1;
 	}
+
+
         return 0;
 }
 
-int tc110_mem_c = 0;
-int tc111_mem_c = 0;
+ut_cnt_def(110, alloc);
+ut_cnt_def(111, alloc);
+ut_cnt_def(112, alloc);
 static void *kzalloc(size_t size, int flags) {
 	void *p;
-	switch(testcase) {
-		case 110:
-			tc110_mem_c++;
-			break;
-		case 111:
-			tc111_mem_c++;
-			break;
-	}
+
+	ut_cnt_add(110, alloc);
+	ut_cnt_add(111, alloc);
+	ut_cnt_add(112, alloc);
+
 	p = malloc(size);
 	bzero(p, size);
 	return p;
 }
 
 void kfree(void *objp){
-	switch(testcase) {
-		case 110:
-			tc110_mem_c--;
-			break;
-		case 111:
-			tc111_mem_c--;
-			break;
-	}
+	ut_cnt_sub(110, alloc);
+	ut_cnt_sub(111, alloc);
+	ut_cnt_sub(112, alloc);
 	free(objp);
 }
 
@@ -111,9 +115,16 @@ struct hnae_ae_dev ae_dev =
 
 #define BUF_SIZE 1024
 #define DESC_NUM 5
+int tc112_alloc_buffer_cnt = 0;
 static int _alloc_buffer(struct hnae_handle *handle,
 	struct hnae_ring *ring, struct hnae_rb_desc_cb *cb)
 {
+	if(testcase==112) {
+		if(tc112_alloc_buffer_cnt++==4) {
+			return -1;
+		}
+	}
+
 	cb->buf = cb->priv = malloc(ring->buf_size);
 	cb->length = ring->buf_size;
 	ut_assert(cb->buf);
@@ -217,11 +228,14 @@ void case_get_put_handle(void)
 	ut_assert(!IS_ERR(h));
 	ut_assert_str(ae_dev.use_count == 1, "use_count=%d, should be 1\n", ae_dev.use_count);
 
+	hnae_ae_unregister(&ae_dev); //should not unregister when using
+	ut_assert(find_ae("ae_id"));
+
 	hnae_put_handle(h);
 
 	ut_assert(!ae_dev.use_count);
 
-	ut_assert(tc110_mem_c==0);
+	ut_check_cnt(110, alloc);
 
 
 	//test to fail: dma_map fail in the middle
@@ -229,9 +243,27 @@ void case_get_put_handle(void)
 	h = hnae_get_handle(NULL, "ae_id", "ae_opts", &_bops);
 	ut_assert(IS_ERR(h));
 	ut_assert(ae_dev.use_count == 0);
-	ut_assert_str(tc111_mem_c==0, "tc111_mem_c=%d\n", tc111_mem_c);
+	ut_check_cnt(111, alloc);
+	ut_check_cnt_range(111, 119, dma_map);
+
+	//test to fail: alloc_buffer fail in the middle
+	testcase = 112;
+	h = hnae_get_handle(NULL, "ae_id", "ae_opts", &_bops);
+	ut_assert(IS_ERR(h));
+	ut_assert(ae_dev.use_count == 0);
+	ut_check_cnt(112, alloc);
+	ut_check_cnt_range(111, 119, dma_map);
+
+	//test to fail: dma map fail for desc
+	testcase = 113;
+	h = hnae_get_handle(NULL, "ae_id", "ae_opts", &_bops);
+	ut_assert(IS_ERR(h));
+	ut_assert(ae_dev.use_count == 0);
+	ut_check_cnt(112, alloc);
+	ut_check_cnt_range(111, 119, dma_map);
 
 	hnae_ae_unregister(&ae_dev);
+	ut_assert(!find_ae("ae_id"));
 }
 
 //------------------------------------------

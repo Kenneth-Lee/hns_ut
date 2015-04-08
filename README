@@ -1,0 +1,10 @@
+to test:
+
+make sure the target hns is defined correct in Makefile
+install gcc and lcov
+
+then:
+1. make
+2. ./ut.sh
+
+then get the test report from "out" dir

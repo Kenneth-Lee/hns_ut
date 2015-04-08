@@ -7,9 +7,9 @@
 #include <stdarg.h>
 #include <setjmp.h>
 
+/**** ut_assert ****/
 #define ut_assert(cond) ut_assert_func(__FILE__, __LINE__, !!(cond), "")
 #define ut_assert_str(cond, fmt, ...) ut_assert_func(__FILE__, __LINE__, !!(cond), fmt, ##__VA_ARGS__)
-
 
 #ifdef UT_DUMPSTACK
 #define ut_dumpstack() dumpstack()
@@ -43,6 +43,7 @@ void ut_assert_func(char * f, int line, int cond, const char *fmt, ...) {
 	va_end(args);
 }
 
+/**** testcase and broken jump ****/
 void default_broken(int val) {
 	printf("broken from test (val=%d)\n", val);
 }
@@ -67,5 +68,19 @@ static inline void testj(void (*test_func)(void)) {
 	printf("done\n");
 
 
+/**** pair counter ****/
+#define ut_cnt_val_range(tcid1, tcid2, cls) utcnt_##tcid1##tcid2##cls
+#define ut_cnt_def_range(tcid1, tcid2, cls) int ut_cnt_val_range(tcid1, tcid2, cls) = 0
+#define ut_cnt_add_range(tcid1, tcid2, cls) if(testcase>=tcid1&&testcase<=tcid2) ut_cnt_val_range(tcid1, tcid2, cls)++
+#define ut_cnt_sub_range(tcid1, tcid2, cls) if(testcase>=tcid1&&testcase<=tcid2) ut_cnt_val_range(tcid1, tcid2, cls)--
+#define ut_check_cnt_var_range(tcid1, tcid2, cls, var) \
+	ut_assert_str(ut_cnt_val_range(tcid1, tcid2, cls)==var, \
+	"testcase %d-%d fail on pair check for %s: %d\n", \
+	tcid1, tcid2, #cls, ut_cnt_val_range(tcid1, tcid2, cls))
+#define ut_check_cnt_range(tcid1, tcid2, cls) ut_check_cnt_var_range(tcid1, tcid2, cls, 0)
 
-#define MAX_ERRNO	4095
+#define ut_cnt_def(tcid, cls) ut_cnt_def_range(tcid, tcid, cls)
+#define ut_cnt_add(tcid, cls) ut_cnt_add_range(tcid, tcid, cls)
+#define ut_cnt_sub(tcid, cls) ut_cnt_sub_range(tcid, tcid, cls)
+#define ut_check_cnt_var(tcid, cls, var) ut_check_cnt_var_range(tcid, tcid, cls, var)
+#define ut_check_cnt(tcid, cls) ut_check_cnt_range(tcid, tcid, cls)

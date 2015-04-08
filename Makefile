@@ -1,4 +1,4 @@
-TARGET_DIR=../htsat_kernel/drivers/net/ethernet/hisilicon/
+TARGET_DIR=../htsat_kernel/drivers/net/ethernet/hisilicon/hns
 CFLAGS=-O0 --coverage -g -I general_stub -I $(TARGET_DIR) 
 COMM_FILES=ut.c comm.h
 
