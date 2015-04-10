@@ -14,6 +14,8 @@ typedef int bool;
 typedef unsigned long size_t;
 typedef int irqreturn_t;
 
+struct page {
+};
 
 #define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
 #define container_of(ptr, type, member) ({                      \
@@ -35,6 +37,13 @@ enum netdev_tx {
 	NETDEV_TX_LOCKED = 0x20,	/* driver tx lock was already taken */
 };
 typedef enum netdev_tx netdev_tx_t;
+
+enum dma_data_direction {
+	DMA_BIDIRECTIONAL = 0,
+	DMA_TO_DEVICE = 1,
+	DMA_FROM_DEVICE = 2,
+	DMA_NONE = 3,
+};
 
 #define DMA_TO_DEVICE 1
 #define DMA_FROM_DEVICE 2
@@ -408,6 +417,7 @@ struct net_device {
 	struct pm_qos_request	pm_qos_req;
 	*/
 };
+typedef unsigned int sk_buff_data_t;
 struct sk_buff {
 	struct sk_buff		*next;
 	struct sk_buff		*prev;
@@ -500,10 +510,8 @@ struct sk_buff {
 	u32			headers_end[0];
 	/* public: */
 
-/*
 	sk_buff_data_t		tail;
 	sk_buff_data_t		end;
-	*/
 	unsigned char		*head,
 				*data;
 	unsigned int		truesize;
@@ -543,6 +551,7 @@ struct napi_struct {
 #define EINVAL 3
 #define EADDRNOTAVAIL 4
 #define ENODEV 5
+#define EBUSY 6
 
 #define GFP_KERNEL 1
 
@@ -697,11 +706,11 @@ struct net_device_ops {
 	int			(*ndo_validate_addr)(struct net_device *dev);
 	int			(*ndo_do_ioctl)(struct net_device *dev,
 					        struct ifreq *ifr, int cmd);
+	int			(*ndo_change_mtu)(struct net_device *dev,
+						  int new_mtu);
 	/*
 	int			(*ndo_set_config)(struct net_device *dev,
 					          struct ifmap *map);
-	int			(*ndo_change_mtu)(struct net_device *dev,
-						  int new_mtu);
 	int			(*ndo_neigh_setup)(struct net_device *dev,
 						   struct neigh_parms *);
 	*/

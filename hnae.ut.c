@@ -25,7 +25,6 @@ static int dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
 {
 	ut_assert(dma_addr);
 
-
 	if(testcase==111) 
 		if(tc111_dma_cnt++==4) {
 			ut_cnt_sub_range(111, 119, dma_map);
@@ -39,6 +38,18 @@ static int dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
 
 
         return 0;
+}
+
+static inline dma_addr_t dma_map_page(struct device *dev, struct page *page,
+	unsigned long offset, size_t size, enum dma_data_direction dir) {
+	ut_cnt_add_range(111, 119, dma_map);
+	return MAPPED_DMA;
+}
+
+static inline void dma_unmap_page(struct device *dev, dma_addr_t dma_handle,
+	size_t size, enum dma_data_direction dir)
+{
+	ut_cnt_sub_range(111, 119, dma_map);
 }
 
 ut_cnt_def(110, alloc);
@@ -75,6 +86,39 @@ void BUG_ON(cond) {
 	ut_assert(!cond);
 }
 
+ut_cnt_def(110, page);
+ut_cnt_def(111, page);
+ut_cnt_def(112, page);
+static int tc112_alloc_page_cnt = 0;
+static inline struct page *dev_alloc_pages(unsigned int order)
+{
+	ut_cnt_add(110, page);
+	ut_cnt_add(111, page);
+	ut_cnt_add(112, page);
+	if(testcase==112) {
+		if(tc112_alloc_page_cnt++==3) {
+			ut_cnt_sub(112, page);
+			return 0;
+		}
+	}
+	return (struct page *)malloc(10);
+}
+
+void put_page(struct page *page)
+{
+	ut_cnt_sub(110, page);
+	free(page);
+}
+
+static inline void *page_address(const struct page *page)
+{
+	return (void *)page;
+}
+
+static inline int get_order(unsigned long size) {
+	return 0;
+}
+
 #include "hnae.c"
 
 #define Q_NUM 4
@@ -85,15 +129,19 @@ struct hnae_handle _handle = {
 	.qs = qs,
 };
 
-#define list_del_rcu(v1)
-
-
-struct hnae_handle *_get_handle(struct hnae_ae_dev *dev, const char *opts,
-			                struct hnae_rb_buf_ops *ops) {
+struct hnae_handle *_get_handle(struct hnae_ae_dev *dev, const char *opts)
+{
 	return (struct hnae_handle *)&_handle;
 }
 
 void _put_handle(struct hnae_handle *handle) {
+}
+
+int _set_opts(struct hnae_handle *handle, int type, void *opts) {
+	return 0;
+}
+int _get_opts(struct hnae_handle *handle, int type, void **opts) {
+	return 0;
 }
 
 void _toggle_ring_irq(struct hnae_ring *ring, u32 val){}
@@ -102,6 +150,8 @@ void _toggle_queue_status(struct hnae_queue *queue, u32 val){}
 struct hnae_ae_ops ops = {
 	.get_handle = _get_handle,
 	.put_handle = _put_handle,
+	.get_opts = _get_opts,
+	.set_opts = _set_opts,
 	.toggle_ring_irq = _toggle_ring_irq,
 	.toggle_queue_status = _toggle_queue_status,
 };
@@ -115,32 +165,6 @@ struct hnae_ae_dev ae_dev =
 
 #define BUF_SIZE 1024
 #define DESC_NUM 5
-int tc112_alloc_buffer_cnt = 0;
-static int _alloc_buffer(struct hnae_handle *handle,
-	struct hnae_ring *ring, struct hnae_rb_desc_cb *cb)
-{
-	if(testcase==112) {
-		if(tc112_alloc_buffer_cnt++==4) {
-			return -1;
-		}
-	}
-
-	cb->buf = cb->priv = malloc(ring->buf_size);
-	cb->length = ring->buf_size;
-	ut_assert(cb->buf);
-	return 0;
-}
-
-void _free_buffer(struct hnae_handle *handle,
-	struct hnae_ring *ring, struct hnae_rb_desc_cb *cb)
-{
-	ut_assert(cb->buf);
-	free(cb->buf);
-}
-struct hnae_rb_buf_ops _bops = {
-	.alloc_buffer = _alloc_buffer,
-	.free_buffer = _free_buffer,
-};
 
 //testcase----------------------------------
 void case_register_ae(void)
@@ -219,12 +243,12 @@ void case_get_put_handle(void)
 	ret = hnae_ae_register(&ae_dev);
 	ut_assert(!ret);
 
-	h = hnae_get_handle(NULL, "ae_idddd", "ae_opts", &_bops);
+	h = hnae_get_handle(NULL, "ae_idddd", "ae_opts", NULL);
 	ut_assert(IS_ERR(h));
 	ut_assert(ae_dev.use_count == 0);
 
 	//test to pass
-	h = hnae_get_handle(NULL, "ae_id", "ae_opts", &_bops);
+	h = hnae_get_handle(NULL, "ae_id", "ae_opts", NULL);
 	ut_assert(!IS_ERR(h));
 	ut_assert_str(ae_dev.use_count == 1, "use_count=%d, should be 1\n", ae_dev.use_count);
 
@@ -240,7 +264,7 @@ void case_get_put_handle(void)
 
 	//test to fail: dma_map fail in the middle
 	testcase = 111;
-	h = hnae_get_handle(NULL, "ae_id", "ae_opts", &_bops);
+	h = hnae_get_handle(NULL, "ae_id", "ae_opts", NULL);
 	ut_assert(IS_ERR(h));
 	ut_assert(ae_dev.use_count == 0);
 	ut_check_cnt(111, alloc);
@@ -248,7 +272,7 @@ void case_get_put_handle(void)
 
 	//test to fail: alloc_buffer fail in the middle
 	testcase = 112;
-	h = hnae_get_handle(NULL, "ae_id", "ae_opts", &_bops);
+	h = hnae_get_handle(NULL, "ae_id", "ae_opts", NULL);
 	ut_assert(IS_ERR(h));
 	ut_assert(ae_dev.use_count == 0);
 	ut_check_cnt(112, alloc);
@@ -256,7 +280,7 @@ void case_get_put_handle(void)
 
 	//test to fail: dma map fail for desc
 	testcase = 113;
-	h = hnae_get_handle(NULL, "ae_id", "ae_opts", &_bops);
+	h = hnae_get_handle(NULL, "ae_id", "ae_opts", NULL);
 	ut_assert(IS_ERR(h));
 	ut_assert(ae_dev.use_count == 0);
 	ut_check_cnt(112, alloc);

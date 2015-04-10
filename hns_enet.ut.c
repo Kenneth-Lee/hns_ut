@@ -1,3 +1,4 @@
+#include <string.h>
 #define UT_DUMPSTACK
 #include "comm.h"
 
@@ -7,8 +8,15 @@ extern u32 readl_relaxed(const volatile void __iomem *addr) {
 	return 0;
 }
 
-static struct sk_buff *netdev_alloc_skb(struct net_device *dev, unsigned int length) {
-	return NULL;
+static inline struct page *dev_alloc_pages(unsigned int order) {
+	return (struct page *)malloc(10);
+}
+static inline void *page_address(const struct page *page) {
+	return (void *)page;
+}
+
+static inline struct sk_buff *napi_alloc_skb(struct napi_struct *napi, unsigned int length) {
+	return malloc(sizeof(struct sk_buff*));
 }
 
 struct skb_shared_info {
@@ -44,6 +52,7 @@ static void netdev_tx_completed_queue(struct netdev_queue *dev_queue,
 }
 
 static void dev_kfree_skb_any(struct sk_buff *skb) {
+	free(skb);
 }
 
 static bool netif_tx_queue_stopped(const struct netdev_queue *dev_queue) {
@@ -80,16 +89,22 @@ struct ipv6hdr {
 	int nexthdr;
 };
 struct iphdr *ip_hdr(struct sk_buff *skb) {
-	return NULL;
+	static struct iphdr v;
+	return &v;
 }
 struct ipv6hdr *ipv6_hdr(struct sk_buff *skb) {
-	return NULL;
+	static struct ipv6hdr v;
+	return &v;
 }
 
 void *netdev_priv(struct net_device *ndev);
 
 static void *kzalloc(size_t size, int flags) {
-	return NULL;
+	void *p; 
+	
+	p = malloc(size);
+	bzero(p, size);
+	return p;
 }
 
 static bool is_valid_ether_addr(const u8 *addr) {
@@ -207,14 +222,16 @@ static inline void netif_start_queue(struct net_device *dev) {}
 static inline void netif_stop_queue(struct net_device *dev){}
 void netif_carrier_off(struct net_device *dev) {}
 struct hnae_handle;
-struct hnae_rb_buf_ops;
+struct hnae_buf_ops;
 unsigned char *skb_put(struct sk_buff *skb, unsigned int len) {
 	return NULL;
 }
 void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
                     int (*poll)(struct napi_struct *, int), int weight) {
 }
-void kfree(const void *objp){}
+void kfree(const void *objp){
+	free((void *)objp);
+}
 #define local_irq_save(flags)
 #define local_irq_restore(flags) 
 int phy_ethtool_gset(struct phy_device *phydev, struct ethtool_cmd *cmd) {
@@ -255,37 +272,58 @@ static inline bool netif_carrier_ok(const struct net_device *dev) {
 static inline bool schedule_work(struct work_struct *work) {
 	return 0;
 }
+void skb_add_rx_frag(struct sk_buff *skb, int i, struct page *page, int off,
+		                     int size, unsigned int truesize)
+{
+}
+
+void kfree_skb(struct sk_buff *skb)
+{
+}
+static inline int netif_running(const struct net_device *dev)
+{
+	return 0;
+}
 
 #include "hns_enet.c"
 
-struct hnae_handle *my_get_handle(struct hnae_ae_dev *dev, const char *opts,
-                struct hnae_rb_buf_ops *bops) {
-	return NULL;
+#define Q_NUM 4
+struct hnae_ae_dev ae_dev;
+struct hnae_queue qs[Q_NUM];
+struct hnae_handle _handle = {
+	.q_num = Q_NUM,
+	.qs = qs,
+};
+
+struct hnae_handle *_get_handle(struct hnae_ae_dev *dev, const char *opts)
+{
+	return (struct hnae_handle *)&_handle;
 }
 
-#define TEST_Q_NUM 8
+void _put_handle(struct hnae_handle *handle) {
+}
+
+int _set_opts(struct hnae_handle *handle, int type, void *opts) {
+	return 0;
+}
+int _get_opts(struct hnae_handle *handle, int type, void **opts) {
+	return 0;
+}
+
+void _toggle_ring_irq(struct hnae_ring *ring, u32 val){}
+void _toggle_queue_status(struct hnae_queue *queue, u32 val){}
 struct hns_nic_priv priv1;
-struct hnae_handle_k {
-	struct device *owner_dev;
-	struct hnae_ae_dev *dev;
-	int q_num;
-	struct hnae_queue qs[TEST_Q_NUM];
-}handle_k;
-struct hnae_handle *handle1 = (struct hnae_handle *)&handle_k;
-struct hnae_ae_ops ops = {
-	.get_handle = my_get_handle,
-};
-struct hnae_ring *tx_ring1;
-struct hnae_ring *rx_ring1;
+
 void *netdev_priv(struct net_device *ndev) {
 	int i;
-	priv1.ae_handle = handle1;
-	handle1->q_num = TEST_Q_NUM;
+	priv1.ae_handle = &_handle;
 	
-	for(i=0; i<TEST_Q_NUM; i++) {
-		handle1->qs[i].handle = handle1;
-		handle1->qs[i].rx_ring = *rx_ring1;
-		handle1->qs[i].tx_ring = *tx_ring1;
+	for(i=0; i<Q_NUM; i++) {
+		_handle.qs[i].handle = &_handle;
+		_handle.qs[i].tx_ring.buf_size = BUFSIZ;
+		_handle.qs[i].rx_ring.buf_size = BUFSIZ;
+		_handle.qs[i].tx_ring.desc_num = BUFSIZ;
+		_handle.qs[i].rx_ring.desc_num = BUFSIZ;
 	}
 	return &priv1;
 }
@@ -293,18 +331,18 @@ void *netdev_priv(struct net_device *ndev) {
 
 void hnae_put_handle(struct hnae_handle *handle) {};
 struct hnae_handle * hnae_get_handle(struct device * owner_dev,
-        const char *ae_id, const char *ae_opts, struct hnae_rb_buf_ops *bops) {
+        const char *ae_id, const char *ae_opts, struct hnae_buf_ops *bops) {
 	return NULL;
 }
 
-static inline void clear_desc(struct hnae_rb_desc *desc) {
+static inline void clear_desc(struct hnae_desc *desc) {
 	int i;
 	for(i=0;i<16;i++) {
 		desc[i].addr=UNMAPPED_DMA;
 	}
 }
 
-static inline void validate_desc(struct hnae_rb_desc *desc, int start, int end) {
+static inline void validate_desc(struct hnae_desc *desc, int start, int end) {
 	int i;
 	for(i=0;i<16;i++) {
 		if(end >= start)
@@ -324,18 +362,17 @@ static inline void validate_desc(struct hnae_rb_desc *desc, int start, int end) 
 void hns_ethtool_set_ops(struct net_device *ndev)
 {}
 
-void testcase_test_hns_nic_net_xmit_hw(void)
+void case_test_hns_nic_net_xmit_hw(void)
 {
 	struct net_device ndev;
 	struct sk_buff skb;
 	struct hns_nic_ring_data ring_data;
 	struct hnae_ring ring;
 	struct skb_shared_info info1;
-	struct hnae_rb_desc_cb desc_cb[16];
-	struct hnae_rb_desc desc[16];
+	struct hnae_desc_cb desc_cb[16];
+	struct hnae_desc desc[16];
 	int ret;
 	int i,j;
-	tx_ring1 = &ring;
 
 #define reset(tc) do {\
 		testcase = tc;\
@@ -498,7 +535,7 @@ void testcase_test_hns_nic_net_xmit_hw(void)
 }
 
 int main(void) {
-	testcase_test_hns_nic_net_xmit_hw();
+	test(100, case_test_hns_nic_net_xmit_hw);
 	return 0;
 }
 
