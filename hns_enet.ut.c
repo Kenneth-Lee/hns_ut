@@ -18,6 +18,8 @@ static inline void *page_address(const struct page *page) {
 static inline struct sk_buff *napi_alloc_skb(struct napi_struct *napi, unsigned int length) {
 	return malloc(sizeof(struct sk_buff*));
 }
+static inline void napi_enable(struct napi_struct *n){}
+void napi_disable(struct napi_struct *n){}
 
 struct skb_shared_info {
 	unsigned char	nr_frags;
@@ -122,8 +124,10 @@ u32 ethtool_op_get_link(struct net_device *dev) {
 const void *of_get_mac_address(struct device_node *np) {
 	return NULL;
 }
+struct net_device _ndev;
 struct net_device *alloc_etherdev_mq(int sizeof_priv, unsigned int txqs) {
-	return NULL;
+
+	return &_ndev;
 }
 static int dma_set_mask_and_coherent(struct device *dev, u64 mask) {
 	return 0;
@@ -288,11 +292,14 @@ static inline int netif_running(const struct net_device *dev)
 #include "hns_enet.c"
 
 #define Q_NUM 4
+#define BUFSIZE 12
+#define DESCNUM 10
 struct hnae_ae_dev ae_dev;
 struct hnae_queue qs[Q_NUM];
+struct hnae_queue *pqs[4];
 struct hnae_handle _handle = {
 	.q_num = Q_NUM,
-	.qs = qs,
+	.qs = pqs,
 };
 
 struct hnae_handle *_get_handle(struct hnae_ae_dev *dev, const char *opts)
@@ -319,11 +326,12 @@ void *netdev_priv(struct net_device *ndev) {
 	priv1.ae_handle = &_handle;
 	
 	for(i=0; i<Q_NUM; i++) {
-		_handle.qs[i].handle = &_handle;
-		_handle.qs[i].tx_ring.buf_size = BUFSIZ;
-		_handle.qs[i].rx_ring.buf_size = BUFSIZ;
-		_handle.qs[i].tx_ring.desc_num = BUFSIZ;
-		_handle.qs[i].rx_ring.desc_num = BUFSIZ;
+		qs[i].handle = &_handle;
+		qs[i].tx_ring.buf_size = BUFSIZE;
+		qs[i].rx_ring.buf_size = BUFSIZE;
+		qs[i].tx_ring.desc_num = DESCNUM;
+		qs[i].rx_ring.desc_num = DESCNUM;
+		pqs[i] = &qs[i];
 	}
 	return &priv1;
 }
@@ -465,7 +473,7 @@ void case_test_hns_nic_net_xmit_hw(void)
 		ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
 		ut_assert(ret == NETDEV_TX_OK);
 		ut_assert(ring_data.tx_err_cnt == 1);
-		ut_assert(ring.next_to_use == 5+i); //move forward
+		ut_assert(ring.next_to_use == 5+i || ring.next_to_use == -1); //move forward
 		ut_assert(ring.next_to_clean == 10); //no touch to end
 		ut_assert(desc[4+i].tx.fe == 1); //one fragment only
 		ut_assert(ring_data.pkt_cnt == 12+i);
@@ -476,7 +484,7 @@ void case_test_hns_nic_net_xmit_hw(void)
 	ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
 	ut_assert(ret == NETDEV_TX_BUSY);
 	ut_assert(ring_data.tx_err_cnt == 1);
-	ut_assert(ring.next_to_use == 10); //stop here
+	ut_assert(ring.next_to_use == 10 || ring.next_to_use == -1); //stop here
 	ut_assert(ring.next_to_clean == 10); //no touch to end
 	ut_assert(ring_data.pkt_cnt == 17);
 	ut_assert(ring_data.byte_cnt == 7100);
@@ -494,7 +502,7 @@ void case_test_hns_nic_net_xmit_hw(void)
 	ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
 	ut_assert(ret == NETDEV_TX_OK);
 	ut_assert(ring_data.tx_err_cnt == 1);
-	ut_assert(ring.next_to_use == 10);
+	ut_assert(ring.next_to_use == 10 || ring.next_to_use == -1);
 	ut_assert(ring.next_to_clean == 10);
 	ut_assert(ring_data.pkt_cnt == 11);
 	ut_assert(ring_data.byte_cnt == 1100);
@@ -503,7 +511,7 @@ void case_test_hns_nic_net_xmit_hw(void)
 	ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
 	ut_assert(ret == NETDEV_TX_BUSY);
 	ut_assert(ring_data.tx_err_cnt == 1);
-	ut_assert(ring.next_to_use == 10); //stop here
+	ut_assert(ring.next_to_use == 10 || ring.next_to_use == -1); //stop here
 	ut_assert(ring.next_to_clean == 10); //no touch to end
 	ut_assert(ring_data.pkt_cnt == 11);
 	ut_assert(ring_data.byte_cnt == 1100);
@@ -527,15 +535,27 @@ void case_test_hns_nic_net_xmit_hw(void)
 	ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
 	ut_assert_str(ret == NETDEV_TX_OK, "ret=%d", ret);
 	ut_assert(ring_data.tx_err_cnt == 1);
-	ut_assert(ring.next_to_use == 3);
+	ut_assert(ring.next_to_use == 3 || ring.next_to_use == -1);
 	ut_assert_str(ring.next_to_clean == 3, "next_to_clean=%d", ring.next_to_clean);
 	ut_assert_str(ring_data.pkt_cnt == 11, "pkt_cnt=%d", ring_data.pkt_cnt);
 	ut_assert(ring_data.byte_cnt == 1100);
 	validate_desc(desc, 10, 3);
 }
 
+void case_probe(void) {
+	struct platform_device dev;
+	int ret;
+
+	//test to pass
+	ret = hns_nic_dev_probe(&dev);
+	ut_assert(!ret);
+	hns_nic_dev_remove(&dev);
+	ut_assert(!ret);
+}
+
 int main(void) {
 	test(100, case_test_hns_nic_net_xmit_hw);
+	test(200, case_probe);
 	return 0;
 }
 

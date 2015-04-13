@@ -124,9 +124,10 @@ static inline int get_order(unsigned long size) {
 #define Q_NUM 4
 struct hnae_ae_dev ae_dev;
 struct hnae_queue qs[Q_NUM];
+struct hnae_queue *pqs[Q_NUM];
 struct hnae_handle _handle = {
 	.q_num = Q_NUM,
-	.qs = qs,
+	.qs = pqs,
 };
 
 struct hnae_handle *_get_handle(struct hnae_ae_dev *dev, const char *opts)
@@ -238,6 +239,7 @@ void case_get_put_handle(void)
 		qs[i].tx_ring.desc_num = DESC_NUM;
 		qs[i].rx_ring.buf_size = BUF_SIZE;
 		qs[i].rx_ring.desc_num = DESC_NUM;
+		pqs[i] = &qs[i];
 	}
 
 	ret = hnae_ae_register(&ae_dev);
