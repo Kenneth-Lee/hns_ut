@@ -294,14 +294,7 @@ static inline int netif_running(const struct net_device *dev)
 #define Q_NUM 4
 #define BUFSIZE 12
 #define DESCNUM 10
-struct hnae_ae_dev ae_dev;
-struct hnae_queue qs[Q_NUM];
-struct hnae_queue *pqs[4];
-struct hnae_handle _handle = {
-	.q_num = Q_NUM,
-	.qs = pqs,
-};
-
+struct hnae_handle _handle;
 struct hnae_handle *_get_handle(struct hnae_ae_dev *dev, const char *opts)
 {
 	return (struct hnae_handle *)&_handle;
@@ -319,12 +312,32 @@ int _get_opts(struct hnae_handle *handle, int type, void **opts) {
 
 void _toggle_ring_irq(struct hnae_ring *ring, u32 val){}
 void _toggle_queue_status(struct hnae_queue *queue, u32 val){}
-struct hns_nic_priv priv1;
+struct hnae_ae_ops _ops = {
+	.get_handle = _get_handle,
+	.put_handle = _put_handle,
+	.get_opts = _get_opts,
+	.set_opts = _set_opts,
+	.toggle_ring_irq = _toggle_ring_irq,
+	.toggle_queue_status = _toggle_queue_status,
+};
 
-void *netdev_priv(struct net_device *ndev) {
+struct hnae_ae_dev ae_dev = {
+	.ops = &_ops,
+};
+struct hnae_queue qs[Q_NUM];
+struct hnae_queue *pqs[Q_NUM];
+struct hnae_handle _handle = {
+	.dev = &ae_dev,
+	.q_num = Q_NUM,
+	.qs = pqs,
+};
+
+struct hns_nic_priv priv1 = {
+	.ae_handle = &_handle,
+};
+
+static void init_qs(void) {
 	int i;
-	priv1.ae_handle = &_handle;
-	
 	for(i=0; i<Q_NUM; i++) {
 		qs[i].handle = &_handle;
 		qs[i].tx_ring.buf_size = BUFSIZE;
@@ -333,14 +346,18 @@ void *netdev_priv(struct net_device *ndev) {
 		qs[i].rx_ring.desc_num = DESCNUM;
 		pqs[i] = &qs[i];
 	}
-	return &priv1;
 }
 
+void *netdev_priv(struct net_device *ndev) {
+	init_qs();	
+	return &priv1;
+}
 
 void hnae_put_handle(struct hnae_handle *handle) {};
 struct hnae_handle * hnae_get_handle(struct device * owner_dev,
         const char *ae_id, const char *ae_opts, struct hnae_buf_ops *bops) {
-	return NULL;
+	init_qs();
+	return &_handle;
 }
 
 static inline void clear_desc(struct hnae_desc *desc) {
@@ -551,11 +568,72 @@ void case_probe(void) {
 	ut_assert(!ret);
 	hns_nic_dev_remove(&dev);
 	ut_assert(!ret);
+
+	//todo: test to fail
+}
+
+void case_open(void) {
+	int ret;
+	struct net_device ndev;
+
+	//test to pass
+	ret = hns_nic_net_open(&ndev);
+	ut_assert(!ret);
+
+	ret = hns_nic_net_stop(&ndev);
+	ut_assert(!ret);
+	
+}
+
+void case_set_mac(void) {
+	struct sockaddr sa = {
+		.sa_data = "\xaa\xbb\xcc\xdd\xee\xff",
+	};
+	char ndevmac[14];
+	struct net_device ndev = {
+		.addr_len = 6,
+		.dev_addr = ndevmac,
+	};
+	int ret;
+
+	//test to pass
+	ret = hns_nic_net_set_mac_address(&ndev, &sa);
+	ut_assert(!ret);
+}
+
+#define COMMON_POLL_BUDGET 4
+int _poll1(struct hns_nic_ring_data* ring_data) {
+	return 0;
+}
+
+void case_common_poll(void) {
+	struct hns_nic_ring_data ring_data = {
+		.poll_one = _poll1,
+	};
+	int ret;
+
+	ret = hns_nic_common_poll(&ring_data.napi, COMMON_POLL_BUDGET);
+	ut_assert(ret == COMMON_POLL_BUDGET);
+}
+
+void case_rx_poll_one(void) {
+}
+
+void case_tx_poll_one(void) {
+	struct hns_nic_ring_data ring_data = {
+	};
+	int ret;
+	ret = hns_nic_tx_poll_one(&ring_data);
 }
 
 int main(void) {
 	test(100, case_test_hns_nic_net_xmit_hw);
 	test(200, case_probe);
+	test(300, case_open);
+	test(400, case_set_mac);
+	test(500, case_common_poll);
+	test(600, case_rx_poll_one);
+	test(700, case_tx_poll_one);
 	return 0;
 }
 
