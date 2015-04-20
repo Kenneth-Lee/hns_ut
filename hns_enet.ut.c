@@ -29,7 +29,12 @@ static inline void *page_address(const struct page *page) {
 }
 
 static inline struct sk_buff *napi_alloc_skb(struct napi_struct *napi, unsigned int length) {
-	struct sk_buff *skb = malloc(sizeof(struct sk_buff*));
+	struct sk_buff *skb;
+
+	if(testcase==610)
+		return 0;
+
+	skb = malloc(sizeof(struct sk_buff*));
 	skb->data = malloc(1024);
 	return skb;
 }
@@ -239,7 +244,9 @@ static void dma_unmap_single(struct device *dev, dma_addr_t dma_addr,
 }
 
 short eth_type_trans(struct sk_buff *skb, struct net_device *dev) { return 0; } 
+int napi_gro_receive_cnt = 0;
 int napi_gro_receive(struct napi_struct *napi, struct sk_buff *skb) {
+	napi_gro_receive_cnt++;
 	return 0;
 }
 
@@ -314,9 +321,12 @@ static inline bool netif_carrier_ok(const struct net_device *dev) {
 static inline bool schedule_work(struct work_struct *work) {
 	return 0;
 }
+
+int skb_add_rx_frag_cnt = 0;
 void skb_add_rx_frag(struct sk_buff *skb, int i, struct page *page, int off,
 		                     int size, unsigned int truesize)
 {
+	skb_add_rx_frag_cnt++;
 }
 
 void kfree_skb(struct sk_buff *skb)
@@ -659,13 +669,14 @@ void case_set_mac(void) {
 int tc500_poll_cnt = 0;
 int _poll1(struct hns_nic_ring_data* ring_data) {
 	if(tc500_poll_cnt++>=10)
-		return 1;
+		return 0;
 
-	return 0;
+	return 1;
 }
 
 void common_poll_toggle_ring_riq(struct hnae_ring *ring, u32 val) {
 }
+
 void case_common_poll(void) {
 	struct hnae_ae_ops ops = {
 		.toggle_ring_irq = common_poll_toggle_ring_riq,
@@ -697,10 +708,16 @@ void case_common_poll(void) {
 }
 
 int _alloc_buffer(struct hnae_ring *ring, struct hnae_desc_cb *cb) {
+	if(testcase==620)
+		return 0;
+
 	cb->buf = malloc(1024);
 	return 0;
 }
 void _free_buffer(struct hnae_ring *ring, struct hnae_desc_cb *cb) {
+	if(testcase==620)
+		return;
+
 	free(cb->buf);
 }
 
@@ -711,68 +728,127 @@ int _map_buffer(struct hnae_ring *ring, struct hnae_desc_cb *cb) {
 void _unmap_buffer(struct hnae_ring *ring, struct hnae_desc_cb *cb) {
 }
 
-void case_rx_poll_one(void) {
 #define DESC_NUM 16
-	struct hnae_desc_cb desc_cb[DESC_NUM];
-	struct hnae_desc desc[DESC_NUM];
-	struct hnae_ae_dev ae = {
-		.dev = 0,
-	};
-	struct hnae_buf_ops bops = {
-		.alloc_buffer = _alloc_buffer,
-		.free_buffer = _free_buffer,
-		.map_buffer = _map_buffer,
-		.unmap_buffer = _unmap_buffer,
-	};
-	struct hnae_handle handle = {
-		.bops = &bops,
-	};
-	struct hnae_queue q = {
-		.dev = &ae,
-		.handle = &handle,
-	};
-	struct hnae_ring ring = {
-		.q = &q,
-		.desc_num = DESC_NUM,
-		.desc = desc,
-		.desc_cb = desc_cb,
-		.buf_size = 128,
-	};
-	struct net_device ndev = {
-	};
-	struct hns_nic_ring_data ring_data = {
-		.ring = &ring,
-		.napi.dev = &ndev,
-	};
-	int ret;
+struct hnae_desc_cb desc_cb600[DESC_NUM];
+struct hnae_desc desc600[DESC_NUM];
+struct hnae_ae_dev ae600 = {
+	.dev = 0,
+};
+struct hnae_buf_ops bops600 = {
+	.alloc_buffer = _alloc_buffer,
+	.free_buffer = _free_buffer,
+	.map_buffer = _map_buffer,
+	.unmap_buffer = _unmap_buffer,
+};
+struct hnae_handle handle600 = {
+	.bops = &bops600,
+};
+struct hnae_queue q600 = {
+	.dev = &ae600,
+	.handle = &handle600,
+};
+struct hnae_ring ring600 = {
+	.q = &q600,
+	.desc_num = DESC_NUM,
+	.desc = desc600,
+	.desc_cb = desc_cb600,
+	.buf_size = 128,
+};
+struct net_device ndev600 = {
+};
+struct hns_nic_ring_data ring_data600 = {
+	.ring = &ring600,
+	.napi.dev = &ndev600,
+};
+char buf600[2048];
+void _case_rx_poll_one_init(void) {
 	int i;
 
-	//init env
 	for(i=0; i<DESC_NUM; i++) {
-		desc[i].rx.pkg_len = 100;
-		desc[i].rx.buf_num = 1;
-		desc[i].rx.vld = 1;
-		desc[i].rx.drop = 0;
-		desc[i].rx.l2e = 0;
+		desc600[i].rx.pkg_len = 100;
+		desc600[i].rx.buf_num = 1;
+		desc600[i].rx.vld = 1;
+		desc600[i].rx.drop = 0;
+		desc600[i].rx.l2e = 0;
+		desc_cb600[i].buf = buf600;
 	}
+	napi_gro_receive_cnt = 0;
+	skb_add_rx_frag_cnt = 0;
+}
+
+void case_rx_poll_one(void) {
+	int ret;
 
 	//case 1: no data to send
+	napi_gro_receive_cnt = 0;
+	_case_rx_poll_one_init();
 	readl_val = 0;
-	ret = hns_nic_rx_poll_one(&ring_data);
-	ut_assert(ret !=0);
+	ret = hns_nic_rx_poll_one(&ring_data600);
+	ut_assert(napi_gro_receive_cnt == 0);
+	ut_assert(skb_add_rx_frag_cnt == 0);
+	ut_assert(!ret);
 
 	//case 2: test to pass
+	_case_rx_poll_one_init();
 	readl_val = 3;
-	ring.next_to_clean = 4;
-	ret = hns_nic_rx_poll_one(&ring_data);
-	ut_assert_str(ring.next_to_clean == 5, "next_to_clean=%d", ring.next_to_clean);
+	ring600.next_to_clean = 4;
+	ret = hns_nic_rx_poll_one(&ring_data600);
+	ut_assert_str(ring600.next_to_clean == 5, "next_to_clean=%d", ring600.next_to_clean);
 	ut_assert(ret !=0);
+	ut_assert(napi_gro_receive_cnt == 1);
+	ut_assert(skb_add_rx_frag_cnt == 1);
 
+	_case_rx_poll_one_init();
 	readl_val = 1;
-	ring.next_to_clean = 4;
-	ret = hns_nic_rx_poll_one(&ring_data);
-	ut_assert_str(ring.next_to_clean == 5, "next_to_clean=%d", ring.next_to_clean);
+	ring600.next_to_clean = 4;
+	ret = hns_nic_rx_poll_one(&ring_data600);
+	ut_assert_str(ring600.next_to_clean == 5, "next_to_clean=%d", ring600.next_to_clean);
 	ut_assert(ret ==0);
+	ut_assert(napi_gro_receive_cnt == 1);
+	ut_assert(skb_add_rx_frag_cnt == 1);
+
+	//case 3: test to pass for short pkg
+	_case_rx_poll_one_init();
+	readl_val = 1;
+	ring600.next_to_clean = 4;
+	desc600[4].rx.pkg_len = MIN_RX_SKB_SIZE-1;
+	ret = hns_nic_rx_poll_one(&ring_data600);
+	ut_assert_str(ring600.next_to_clean == 5, "next_to_clean=%d", ring600.next_to_clean);
+	ut_assert(ret ==0);
+	ut_assert(napi_gro_receive_cnt == 1);
+	ut_assert(skb_add_rx_frag_cnt == 0);
+
+	//case 4: no skb
+	testcase = 610;
+	ring600.next_to_clean = 4;
+	_case_rx_poll_one_init();
+	ret = hns_nic_rx_poll_one(&ring_data600);
+	ut_assert_str(ring600.next_to_clean == 4, "next_to_clean=%d", ring600.next_to_clean);
+	ut_assert(ret);
+	ut_assert(napi_gro_receive_cnt == 0);
+	ut_assert(skb_add_rx_frag_cnt == 0);
+
+	//case 5: test to pass for multi frags
+	testcase = 620;
+	_case_rx_poll_one_init();
+	readl_val = 3;
+	ring600.next_to_clean = 4;
+	desc600[4].rx.buf_num = 3;
+	ret = hns_nic_rx_poll_one(&ring_data600);
+	ut_assert_str(!ret, "ret=%d\n", ret); //no left
+	ut_assert_str(ring600.next_to_clean == 7, "next_to_clean=%d", ring600.next_to_clean);
+	ut_assert(napi_gro_receive_cnt == 1);
+	ut_assert(skb_add_rx_frag_cnt == 3);
+
+	_case_rx_poll_one_init();
+	readl_val = 4;
+	ring600.next_to_clean = 4;
+	desc600[4].rx.buf_num = 3;
+	ret = hns_nic_rx_poll_one(&ring_data600);
+	ut_assert_str(ring600.next_to_clean == 7, "next_to_clean=%d", ring600.next_to_clean);
+	ut_assert(ret ==1); //left
+	ut_assert(napi_gro_receive_cnt == 1);
+	ut_assert(skb_add_rx_frag_cnt == 3);
 }
 
 void case_tx_poll_one(void) {
@@ -806,14 +882,14 @@ void case_tx_poll_one(void) {
 	ring.next_to_clean = 0;
 	ring.next_to_use = 1;
 	ret = hns_nic_tx_poll_one(&ring_data);
-	ut_assert(ret !=0);
+	ut_assert(ret ==0);
 
 	//case 3: bad num
 	readl_val = 4;
 	ring.next_to_clean = 0;
 	ring.next_to_use = 3;
 	ret = hns_nic_tx_poll_one(&ring_data);
-	ut_assert(ret ==0);
+	ut_assert(ret <0); //error
 }
 
 int main(void) {
