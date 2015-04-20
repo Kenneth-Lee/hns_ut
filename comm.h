@@ -14,6 +14,13 @@ typedef int bool;
 typedef unsigned long size_t;
 typedef int irqreturn_t;
 
+typedef enum {
+	GFP_KERNEL,
+	GFP_ATOMIC,
+	__GFP_HIGHMEM,
+	__GFP_HIGH
+} gfp_t;
+
 struct page {
 };
 
@@ -191,11 +198,9 @@ struct device {
 #define SET_NETDEV_DEV(ndev, dev)
 
 struct skb_frag_struct {
-	/*
 	struct {
 		struct page *p;
 	} page;
-	*/
 	u16 page_offset;
 	u16 size;
 };
@@ -517,6 +522,12 @@ struct sk_buff {
 	unsigned int		truesize;
 	//atomic_t		users;
 };
+
+static inline struct page *skb_frag_page(const skb_frag_t *frag)
+{
+	        return frag->page.p;
+}
+
 struct napi_struct {
 	struct list_head	poll_list;
 
@@ -552,8 +563,6 @@ struct napi_struct {
 #define EADDRNOTAVAIL 4
 #define ENODEV 5
 #define EBUSY 6
-
-#define GFP_KERNEL 1
 
 #define THIS_MODULE NULL
 struct device_driver {
@@ -1003,6 +1012,9 @@ static inline bool IS_ERR_OR_NULL(const void *ptr)
 {
 	return !ptr || IS_ERR_VALUE((unsigned long)ptr);
 }
+
+struct timer_list {};
+struct work_struct {};
 
 
 #endif

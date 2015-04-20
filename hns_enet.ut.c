@@ -2,10 +2,23 @@
 #define UT_DUMPSTACK
 #include "comm.h"
 
+int del_timer_sync(struct timer_list *timer) {
+	return 0;
+}
+static inline void netdev_tx_sent_queue(struct netdev_queue *dev_queue, unsigned int bytes)
+{
+}
+
+void put_page(struct page *page)
+{
+}
+
 static void writel_relaxed(u32 val, volatile void __iomem *addr) {
 }
+u32 readl_val=0;
 extern u32 readl_relaxed(const volatile void __iomem *addr) {
-	return 0;
+	
+	return readl_val;
 }
 
 static inline struct page *dev_alloc_pages(unsigned int order) {
@@ -16,10 +29,30 @@ static inline void *page_address(const struct page *page) {
 }
 
 static inline struct sk_buff *napi_alloc_skb(struct napi_struct *napi, unsigned int length) {
-	return malloc(sizeof(struct sk_buff*));
+	struct sk_buff *skb = malloc(sizeof(struct sk_buff*));
+	skb->data = malloc(1024);
+	return skb;
 }
+
+static void dev_kfree_skb_any(struct sk_buff *skb) {
+	ret_in_test(100, 200);
+	ret_in_test(700, 800);
+
+	free(skb->data);
+	free(skb);
+}
+
 static inline void napi_enable(struct napi_struct *n){}
 void napi_disable(struct napi_struct *n){}
+
+struct sk_buff *skb_copy_skb = NULL;
+int skb_copyed = 0;
+struct sk_buff *skb_copy(const struct sk_buff *skb, gfp_t gfp_mask) {
+	if(testcase==104)
+		skb_copyed = 1;
+
+	return skb_copy_skb;
+}
 
 struct skb_shared_info {
 	unsigned char	nr_frags;
@@ -41,6 +74,10 @@ struct skb_shared_info {
 
 struct skb_shared_info *skb_shared_info1;
 struct skb_shared_info *skb_shinfo(struct sk_buff *buf) {
+	if(testcase == 104 && skb_copyed) {
+		skb_shared_info1->nr_frags = 1;
+	}
+
 	return skb_shared_info1;
 }
 
@@ -51,10 +88,6 @@ struct netdev_queue *netdev_get_tx_queue(const struct net_device *dev,
 
 static void netdev_tx_completed_queue(struct netdev_queue *dev_queue,
                                              unsigned int pkts, unsigned int bytes) {
-}
-
-static void dev_kfree_skb_any(struct sk_buff *skb) {
-	free(skb);
 }
 
 static bool netif_tx_queue_stopped(const struct netdev_queue *dev_queue) {
@@ -140,24 +173,38 @@ static unsigned int skb_headlen(const struct sk_buff *skb) {
 }
 #define MAPPED_DMA 0x8989
 #define UNMAPPED_DMA 0x7f7f
-static int dma_mapping_cnt1;
-int tc110_dma_check[3];
+
+ut_cnt_def(110, dma_map);
+ut_cnt_def(112, dma_map);
 static dma_addr_t dma_map_single(struct device *dev, void *cpu_addr, size_t size,
                int dir) {
-	if(testcase==110) {
-		tc110_dma_check[dma_mapping_cnt1] = 1;
-	}
+	ut_cnt_add(110, dma_map);
+	ut_cnt_add(112, dma_map);
 	return MAPPED_DMA;
 }
+
+int tc110_dm_cnt = 0;
+int tc112_dm_cnt = 0;
 static int dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
 {
+	if(testcase == 112) {
+		if(tc110_dm_cnt++==4) {
+			ut_cnt_sub(112, dma_map);
+			return 1;
+		}
+		else
+			return 0;
+	}
+
 	if(testcase == 108) {
 		return 1;
 	}
 
 	if(testcase == 110) {
-		if(dma_mapping_cnt1==4)
+		if(tc110_dm_cnt++==4) {
+			ut_cnt_sub(110, dma_map);
 			return 1;
+		}
 		else
 			return 0;
 	}
@@ -170,32 +217,25 @@ static unsigned int skb_frag_size(const skb_frag_t *frag) {
 }
 static dma_addr_t skb_frag_dma_map(struct device *dev, 
 	const skb_frag_t *frag, size_t offset, size_t size, int dir) {
-	if(testcase == 110) {
-		tc110_dma_check[dma_mapping_cnt1++]=1;
-	}
+	ut_cnt_add(110, dma_map);
 	return 0x8989;
 }
 static void dma_unmap_page(struct device *dev, dma_addr_t dma_handle,
                size_t size, int dir)
 {
+	ut_cnt_sub(110, dma_map);
 	ut_assert(dma_handle==MAPPED_DMA);
 	ut_assert(size==10);
-	if(testcase == 110) {
-		ut_assert(tc110_dma_check[dma_mapping_cnt1-1]==1);
-		tc110_dma_check[dma_mapping_cnt1-1] = 2;
-		dma_mapping_cnt1--;
-	}
 }
 static void dma_unmap_single(struct device *dev, dma_addr_t dma_addr,
                  size_t size, int dir)
 {
+	if(testcase==700)
+		return;
+
 	ut_assert(dma_addr==MAPPED_DMA);
 	ut_assert(size==500);
-	if(testcase==110) {
-		ut_assert(dma_mapping_cnt1 == 1);
-		ut_assert(tc110_dma_check[0] == 1);
-		tc110_dma_check[0] = 2;
-	}
+	ut_cnt_sub(110, dma_map);
 }
 
 short eth_type_trans(struct sk_buff *skb, struct net_device *dev) { return 0; } 
@@ -265,8 +305,6 @@ static void ether_addr_copy(u8 *dst, const u8 *src) {}
 
 static __attribute__((unused)) struct platform_driver hns_nic_dev_driver;
 
-struct timer_list {};
-struct work_struct {};
 int mod_timer(struct timer_list *timer, unsigned long expires){
 	return 0;
 }
@@ -407,8 +445,9 @@ void case_test_hns_nic_net_xmit_hw(void)
 		ring_data.pkt_cnt = 10;\
 		ring_data.byte_cnt = 100;\
 		ring.desc_num = 16;\
+		ring.max_desc_num_per_pkt = 3; \
 		ring.next_to_use = 3;\
-		ring.next_to_clean = 10;/* 7 space */ \
+		ring.next_to_clean = 10;/* 6 space */ \
 		ring.desc_cb = desc_cb;\
 		ring.desc = desc;\
 		ndev.mtu = 1600;\
@@ -454,25 +493,30 @@ void case_test_hns_nic_net_xmit_hw(void)
 	std_validate_no_send(0);
 	validate_desc(desc, 0,0);
 
-	//case2: too much skb fragment
+	//case2: too much skb fragment then limited
 	reset(104);
 	skb.len = 1600; //len == mtu? it should pass, right?
-	info1.nr_frags = 17; //exactly 1 more
+	info1.nr_frags = 7;
+	ring.max_desc_num_per_pkt = 6;
+	skb_copy_skb = &skb;
 	ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
-	std_validate_no_send(0);
-	validate_desc(desc, 0,0);
+	validate_desc(desc, 3,4);
 
+	/* i don't test this, leave it to the skb system
 	reset(105);
 	info1.nr_frags = -1;
 	ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
 	std_validate_no_send(0);
 	validate_desc(desc, 0,0);
+	*/
 
+	//copy skb fail
 	reset(106);
-	info1.nr_frags = 7; //1 more than the space
+	info1.nr_frags = 7;
+	ring.max_desc_num_per_pkt = 6;
+	skb_copy_skb = NULL;
 	ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
-	std_validate_no_send(1);
-	validate_desc(desc, 0,0);
+	std_validate_no_send(0);
 
 	//case 3: test to pass where skb has no fragment
 	reset(107);
@@ -486,11 +530,11 @@ void case_test_hns_nic_net_xmit_hw(void)
 	ut_assert(ring_data.byte_cnt == 1100);
 
 	// move forward
-	for(i=0; i<6; i++) {
+	for(i=0; i<5; i++) {
 		ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
 		ut_assert(ret == NETDEV_TX_OK);
 		ut_assert(ring_data.tx_err_cnt == 1);
-		ut_assert(ring.next_to_use == 5+i || ring.next_to_use == -1); //move forward
+		ut_assert(ring.next_to_use == 5+i);
 		ut_assert(ring.next_to_clean == 10); //no touch to end
 		ut_assert(desc[4+i].tx.fe == 1); //one fragment only
 		ut_assert(ring_data.pkt_cnt == 12+i);
@@ -501,11 +545,22 @@ void case_test_hns_nic_net_xmit_hw(void)
 	ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
 	ut_assert(ret == NETDEV_TX_BUSY);
 	ut_assert(ring_data.tx_err_cnt == 1);
-	ut_assert(ring.next_to_use == 10 || ring.next_to_use == -1); //stop here
+	ut_assert(ring.next_to_use == 9);
 	ut_assert(ring.next_to_clean == 10); //no touch to end
-	ut_assert(ring_data.pkt_cnt == 17);
-	ut_assert(ring_data.byte_cnt == 7100);
-	validate_desc(desc, 3,10);
+	ut_assert(ring_data.pkt_cnt == 16);
+	ut_assert(ring_data.byte_cnt == 6100);
+	validate_desc(desc, 3, 9);
+
+	//try a big frags
+	info1.nr_frags = 100;
+	ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
+	ut_assert(ret == NETDEV_TX_BUSY);
+	ut_assert(ring_data.tx_err_cnt == 1);
+	ut_assert(ring.next_to_use == 9);
+	ut_assert(ring.next_to_clean == 10); //no touch to end
+	ut_assert(ring_data.pkt_cnt == 16);
+	ut_assert(ring_data.byte_cnt == 6100);
+	validate_desc(desc, 3, 9);
 
 	//case 4: test to fail where skb has no fragment
 	reset(108);
@@ -515,11 +570,12 @@ void case_test_hns_nic_net_xmit_hw(void)
 
 	//case 5: test to pass where skb has fragment
 	reset(109);
-	info1.nr_frags = 6; //fill them all
+	info1.nr_frags = 5; //fill them all
+	ring.max_desc_num_per_pkt = 7;
 	ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
 	ut_assert(ret == NETDEV_TX_OK);
 	ut_assert(ring_data.tx_err_cnt == 1);
-	ut_assert(ring.next_to_use == 10 || ring.next_to_use == -1);
+	ut_assert(ring.next_to_use == 9);
 	ut_assert(ring.next_to_clean == 10);
 	ut_assert(ring_data.pkt_cnt == 11);
 	ut_assert(ring_data.byte_cnt == 1100);
@@ -528,35 +584,34 @@ void case_test_hns_nic_net_xmit_hw(void)
 	ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
 	ut_assert(ret == NETDEV_TX_BUSY);
 	ut_assert(ring_data.tx_err_cnt == 1);
-	ut_assert(ring.next_to_use == 10 || ring.next_to_use == -1); //stop here
+	ut_assert(ring.next_to_use == 9);
 	ut_assert(ring.next_to_clean == 10); //no touch to end
 	ut_assert(ring_data.pkt_cnt == 11);
 	ut_assert(ring_data.byte_cnt == 1100);
-	validate_desc(desc, 3,10);
+	validate_desc(desc, 3,9);
 
 	//case 6: test to fail where skb has fragment
 	reset(110);
-	dma_mapping_cnt1 = 0;
-	info1.nr_frags = 6; //fill them all
+	info1.nr_frags = 5; //fill them all
+	ring.max_desc_num_per_pkt = 7;
 	ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
 	std_validate_no_send(1);
-	for(i=0;i<4;i++) {
-		ut_assert(tc110_dma_check[0] == 2);
-	}
+	ut_check_cnt_var(110, dma_map, 0);
 
 	//case 7: repeat test 5 with loop back ring number
 	reset(111);
-	info1.nr_frags = 8; //fill them all
+	info1.nr_frags = 7; //fill them all
+	ring.max_desc_num_per_pkt = 10;
 	ring.next_to_use = 10;
 	ring.next_to_clean = 3;
 	ret = hns_nic_net_xmit_hw(&ndev, &skb, &ring_data);
 	ut_assert_str(ret == NETDEV_TX_OK, "ret=%d", ret);
 	ut_assert(ring_data.tx_err_cnt == 1);
-	ut_assert(ring.next_to_use == 3 || ring.next_to_use == -1);
+	ut_assert(ring.next_to_use == 2);
 	ut_assert_str(ring.next_to_clean == 3, "next_to_clean=%d", ring.next_to_clean);
 	ut_assert_str(ring_data.pkt_cnt == 11, "pkt_cnt=%d", ring_data.pkt_cnt);
 	ut_assert(ring_data.byte_cnt == 1100);
-	validate_desc(desc, 10, 3);
+	validate_desc(desc, 10, 2);
 }
 
 void case_probe(void) {
@@ -601,29 +656,164 @@ void case_set_mac(void) {
 	ut_assert(!ret);
 }
 
-#define COMMON_POLL_BUDGET 4
+int tc500_poll_cnt = 0;
 int _poll1(struct hns_nic_ring_data* ring_data) {
+	if(tc500_poll_cnt++>=10)
+		return 1;
+
 	return 0;
 }
 
+void common_poll_toggle_ring_riq(struct hnae_ring *ring, u32 val) {
+}
 void case_common_poll(void) {
+	struct hnae_ae_ops ops = {
+		.toggle_ring_irq = common_poll_toggle_ring_riq,
+	};
+	struct hnae_ae_dev dev = {
+		.ops = &ops,
+	};
+	struct hnae_handle handle = {
+		.dev = &dev,
+	};
+	struct hnae_queue q = {
+		.handle = &handle,
+	};
+	struct hnae_ring ring = {
+		.q = &q,
+	};
 	struct hns_nic_ring_data ring_data = {
 		.poll_one = _poll1,
+		.ring = &ring,
 	};
 	int ret;
 
-	ret = hns_nic_common_poll(&ring_data.napi, COMMON_POLL_BUDGET);
-	ut_assert(ret == COMMON_POLL_BUDGET);
+	ret = hns_nic_common_poll(&ring_data.napi, 5);
+	ut_assert(ret == 5);
+
+	tc500_poll_cnt = 0;
+	ret = hns_nic_common_poll(&ring_data.napi, 15);
+	ut_assert_str(ret == 10, "ret=%d\n", ret);
+}
+
+int _alloc_buffer(struct hnae_ring *ring, struct hnae_desc_cb *cb) {
+	cb->buf = malloc(1024);
+	return 0;
+}
+void _free_buffer(struct hnae_ring *ring, struct hnae_desc_cb *cb) {
+	free(cb->buf);
+}
+
+int _map_buffer(struct hnae_ring *ring, struct hnae_desc_cb *cb) {
+	return 0;
+}
+
+void _unmap_buffer(struct hnae_ring *ring, struct hnae_desc_cb *cb) {
 }
 
 void case_rx_poll_one(void) {
+#define DESC_NUM 16
+	struct hnae_desc_cb desc_cb[DESC_NUM];
+	struct hnae_desc desc[DESC_NUM];
+	struct hnae_ae_dev ae = {
+		.dev = 0,
+	};
+	struct hnae_buf_ops bops = {
+		.alloc_buffer = _alloc_buffer,
+		.free_buffer = _free_buffer,
+		.map_buffer = _map_buffer,
+		.unmap_buffer = _unmap_buffer,
+	};
+	struct hnae_handle handle = {
+		.bops = &bops,
+	};
+	struct hnae_queue q = {
+		.dev = &ae,
+		.handle = &handle,
+	};
+	struct hnae_ring ring = {
+		.q = &q,
+		.desc_num = DESC_NUM,
+		.desc = desc,
+		.desc_cb = desc_cb,
+		.buf_size = 128,
+	};
+	struct net_device ndev = {
+	};
+	struct hns_nic_ring_data ring_data = {
+		.ring = &ring,
+		.napi.dev = &ndev,
+	};
+	int ret;
+	int i;
+
+	//init env
+	for(i=0; i<DESC_NUM; i++) {
+		desc[i].rx.pkg_len = 100;
+		desc[i].rx.buf_num = 1;
+		desc[i].rx.vld = 1;
+		desc[i].rx.drop = 0;
+		desc[i].rx.l2e = 0;
+	}
+
+	//case 1: no data to send
+	readl_val = 0;
+	ret = hns_nic_rx_poll_one(&ring_data);
+	ut_assert(ret !=0);
+
+	//case 2: test to pass
+	readl_val = 3;
+	ring.next_to_clean = 4;
+	ret = hns_nic_rx_poll_one(&ring_data);
+	ut_assert_str(ring.next_to_clean == 5, "next_to_clean=%d", ring.next_to_clean);
+	ut_assert(ret !=0);
+
+	readl_val = 1;
+	ring.next_to_clean = 4;
+	ret = hns_nic_rx_poll_one(&ring_data);
+	ut_assert_str(ring.next_to_clean == 5, "next_to_clean=%d", ring.next_to_clean);
+	ut_assert(ret ==0);
 }
 
 void case_tx_poll_one(void) {
+#define DESC_NUM 16
+	struct hnae_desc_cb desc_cb[DESC_NUM];
+	struct hnae_desc desc[DESC_NUM];
+	struct hnae_ae_dev ae = {
+		.dev = 0,
+	};
+	struct hnae_queue q = {
+		.dev = &ae,
+	};
+	struct hnae_ring ring = {
+		.q = &q,
+		.desc_num = DESC_NUM,
+		.desc = desc,
+		.desc_cb = desc_cb,
+	};
 	struct hns_nic_ring_data ring_data = {
+		.ring = &ring,
 	};
 	int ret;
+
+	//case 1: test to pass
+	readl_val = 4;
 	ret = hns_nic_tx_poll_one(&ring_data);
+	ut_assert(ret ==0);
+
+	//case 2: no space 
+	readl_val = 4;
+	ring.next_to_clean = 0;
+	ring.next_to_use = 1;
+	ret = hns_nic_tx_poll_one(&ring_data);
+	ut_assert(ret !=0);
+
+	//case 3: bad num
+	readl_val = 4;
+	ring.next_to_clean = 0;
+	ring.next_to_use = 3;
+	ret = hns_nic_tx_poll_one(&ring_data);
+	ut_assert(ret ==0);
 }
 
 int main(void) {

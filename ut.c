@@ -67,6 +67,9 @@ static inline void testj(void (*test_func)(void)) {
 	testj(test_func); \
 	printf("done\n");
 
+#define in_test(from, to) (testcase >= (from) && testcase < (to))
+#define ret_in_test(from, to) if(in_test(from, to)) return
+
 
 /**** pair counter ****/
 #define ut_cnt_val_range(tcid1, tcid2, cls) utcnt_##tcid1##tcid2##cls
@@ -84,3 +87,4 @@ static inline void testj(void (*test_func)(void)) {
 #define ut_cnt_sub(tcid, cls) ut_cnt_sub_range(tcid, tcid, cls)
 #define ut_check_cnt_var(tcid, cls, var) ut_check_cnt_var_range(tcid, tcid, cls, var)
 #define ut_check_cnt(tcid, cls) ut_check_cnt_range(tcid, tcid, cls)
+
