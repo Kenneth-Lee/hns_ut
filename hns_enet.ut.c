@@ -13,11 +13,15 @@ void put_page(struct page *page)
 {
 }
 
+u32 writel_val=0;
 static void writel_relaxed(u32 val, volatile void __iomem *addr) {
+	ut_assert(addr);
+	writel_val = val;
 }
+
 u32 readl_val=0;
 extern u32 readl_relaxed(const volatile void __iomem *addr) {
-	
+	ut_assert(addr);
 	return readl_val;
 }
 
@@ -707,7 +711,16 @@ void case_common_poll(void) {
 	ut_assert_str(ret == 10, "ret=%d\n", ret);
 }
 
+int tc630_alloc_buffer_cnt=0;
+int _alloc_buffer_cnt=0;
 int _alloc_buffer(struct hnae_ring *ring, struct hnae_desc_cb *cb) {
+	if(testcase==630) {
+		if(tc630_alloc_buffer_cnt++>1)
+			return -1;
+	}
+
+	_alloc_buffer_cnt++;
+
 	if(testcase==620)
 		return 0;
 
@@ -718,14 +731,21 @@ void _free_buffer(struct hnae_ring *ring, struct hnae_desc_cb *cb) {
 	if(testcase==620)
 		return;
 
+	_alloc_buffer_cnt--;
+
 	free(cb->buf);
 }
 
+int _map_buffer_cnt = 0;
 int _map_buffer(struct hnae_ring *ring, struct hnae_desc_cb *cb) {
+	_map_buffer_cnt++;
+	cb->dma=1234;
 	return 0;
 }
 
 void _unmap_buffer(struct hnae_ring *ring, struct hnae_desc_cb *cb) {
+	cb->dma=5678;
+	_map_buffer_cnt--;
 }
 
 #define DESC_NUM 16
@@ -761,9 +781,12 @@ struct hns_nic_ring_data ring_data600 = {
 	.napi.dev = &ndev600,
 };
 char buf600[2048];
-void _case_rx_poll_one_init(void) {
+int buff_adj = 0; //slightly adjust the buff mapping counter for small pkg
+void _case_rx_poll_one_init(int tc) {
 	int i;
 
+	printf("case%d\n", tc);
+	testcase = tc;
 	for(i=0; i<DESC_NUM; i++) {
 		desc600[i].rx.pkg_len = 100;
 		desc600[i].rx.buf_num = 1;
@@ -772,83 +795,101 @@ void _case_rx_poll_one_init(void) {
 		desc600[i].rx.l2e = 0;
 		desc_cb600[i].buf = buf600;
 	}
+	ring600.next_to_clean = 4;
 	napi_gro_receive_cnt = 0;
 	skb_add_rx_frag_cnt = 0;
+	writel_val=0;
+	_alloc_buffer_cnt=0;
+	_map_buffer_cnt=0;
+	buff_adj = 0;
+}
+
+void _case_rx_poll_one_validate(int nr_skb, int nr_frag, int ntc, int num) {
+	ut_assert_str(napi_gro_receive_cnt == nr_skb, "skb=%d\n", napi_gro_receive_cnt);
+	ut_assert_str(skb_add_rx_frag_cnt == nr_frag, "frag=%d\n", skb_add_rx_frag_cnt);
+	if(ntc>=0)
+		ut_assert_str(ring600.next_to_clean == ntc, "next_to_clean=%d", ring600.next_to_clean);
+	if(num>=0) {
+		ut_assert_str(writel_val==num, "write back with %d(should be %d)\n", writel_val, num);
+
+		num-=buff_adj; //for small pkt, no mapping 
+		ut_assert_str(_alloc_buffer_cnt == num, "alloc %d/%d\n", _alloc_buffer_cnt, num);
+		num-=nr_frag; //for successful receiving, old desc will be unmapped
+		ut_assert_str(_map_buffer_cnt == num, "map %d/%d\n", _map_buffer_cnt, num);
+	}
 }
 
 void case_rx_poll_one(void) {
 	int ret;
 
 	//case 1: no data to send
-	napi_gro_receive_cnt = 0;
-	_case_rx_poll_one_init();
+	
+	_case_rx_poll_one_init(600);
 	readl_val = 0;
 	ret = hns_nic_rx_poll_one(&ring_data600);
-	ut_assert(napi_gro_receive_cnt == 0);
-	ut_assert(skb_add_rx_frag_cnt == 0);
 	ut_assert(!ret);
+	_case_rx_poll_one_validate(0, 0, 4, 0);
 
-	//case 2: test to pass
-	_case_rx_poll_one_init();
+	//case 2: test to pass for common pkg
+	_case_rx_poll_one_init(601);
 	readl_val = 3;
-	ring600.next_to_clean = 4;
 	ret = hns_nic_rx_poll_one(&ring_data600);
-	ut_assert_str(ring600.next_to_clean == 5, "next_to_clean=%d", ring600.next_to_clean);
 	ut_assert(ret !=0);
-	ut_assert(napi_gro_receive_cnt == 1);
-	ut_assert(skb_add_rx_frag_cnt == 1);
+	_case_rx_poll_one_validate(1, 1, 5, 1);
 
-	_case_rx_poll_one_init();
+	_case_rx_poll_one_init(602);
 	readl_val = 1;
-	ring600.next_to_clean = 4;
 	ret = hns_nic_rx_poll_one(&ring_data600);
-	ut_assert_str(ring600.next_to_clean == 5, "next_to_clean=%d", ring600.next_to_clean);
 	ut_assert(ret ==0);
-	ut_assert(napi_gro_receive_cnt == 1);
-	ut_assert(skb_add_rx_frag_cnt == 1);
+	_case_rx_poll_one_validate(1, 1, 5, 1);
 
 	//case 3: test to pass for short pkg
-	_case_rx_poll_one_init();
+	_case_rx_poll_one_init(603);
 	readl_val = 1;
-	ring600.next_to_clean = 4;
+	buff_adj = 1;
 	desc600[4].rx.pkg_len = MIN_RX_SKB_SIZE-1;
 	ret = hns_nic_rx_poll_one(&ring_data600);
-	ut_assert_str(ring600.next_to_clean == 5, "next_to_clean=%d", ring600.next_to_clean);
 	ut_assert(ret ==0);
-	ut_assert(napi_gro_receive_cnt == 1);
-	ut_assert(skb_add_rx_frag_cnt == 0);
+	_case_rx_poll_one_validate(1, 0, 5, 1);
 
 	//case 4: no skb
-	testcase = 610;
-	ring600.next_to_clean = 4;
-	_case_rx_poll_one_init();
+	_case_rx_poll_one_init(610);
 	ret = hns_nic_rx_poll_one(&ring_data600);
-	ut_assert_str(ring600.next_to_clean == 4, "next_to_clean=%d", ring600.next_to_clean);
 	ut_assert(ret);
-	ut_assert(napi_gro_receive_cnt == 0);
-	ut_assert(skb_add_rx_frag_cnt == 0);
+	_case_rx_poll_one_validate(0, 0, 4, 0);
 
 	//case 5: test to pass for multi frags
-	testcase = 620;
-	_case_rx_poll_one_init();
+	_case_rx_poll_one_init(620);
 	readl_val = 3;
-	ring600.next_to_clean = 4;
 	desc600[4].rx.buf_num = 3;
 	ret = hns_nic_rx_poll_one(&ring_data600);
 	ut_assert_str(!ret, "ret=%d\n", ret); //no left
-	ut_assert_str(ring600.next_to_clean == 7, "next_to_clean=%d", ring600.next_to_clean);
-	ut_assert(napi_gro_receive_cnt == 1);
-	ut_assert(skb_add_rx_frag_cnt == 3);
+	_case_rx_poll_one_validate(1, 3, 7, 3);
 
-	_case_rx_poll_one_init();
+	_case_rx_poll_one_init(621);
 	readl_val = 4;
-	ring600.next_to_clean = 4;
 	desc600[4].rx.buf_num = 3;
 	ret = hns_nic_rx_poll_one(&ring_data600);
-	ut_assert_str(ring600.next_to_clean == 7, "next_to_clean=%d", ring600.next_to_clean);
 	ut_assert(ret ==1); //left
-	ut_assert(napi_gro_receive_cnt == 1);
-	ut_assert(skb_add_rx_frag_cnt == 3);
+	_case_rx_poll_one_validate(1, 3, 7, 3);
+
+	//case 6: reserve desc fail
+	_case_rx_poll_one_init(630);
+	readl_val = 4;
+	desc600[4].rx.buf_num = 3;
+	ret = hns_nic_rx_poll_one(&ring_data600);
+	ut_assert(ret <0);
+	_case_rx_poll_one_validate(0, 0, 4, 0);
+
+	//case 6: io err after reserve data
+	_case_rx_poll_one_init(640);
+	readl_val = 4;
+	desc600[4].rx.buf_num = 3;
+	desc600[5].rx.pkg_len = 2048;
+	ret = hns_nic_rx_poll_one(&ring_data600);
+	ut_assert_str(ret <0, "ret=%d\n", ret);
+	_case_rx_poll_one_validate(0, 0, 4, 0);
+	
 }
 
 void case_tx_poll_one(void) {
