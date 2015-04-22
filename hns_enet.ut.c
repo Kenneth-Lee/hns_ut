@@ -381,12 +381,18 @@ int _ae_start(struct hnae_handle *handle) {
 
 void _toggle_ring_irq(struct hnae_ring *ring, u32 val){}
 void _toggle_queue_status(struct hnae_queue *queue, u32 val){}
+
+int _get_state(struct hnae_handle *handle) {
+        return 0;
+}
+
 struct hnae_ae_ops _ops = {
 	.get_handle = _get_handle,
 	.put_handle = _put_handle,
 	.get_opts = _get_opts,
 	.set_opts = _set_opts,
 	.start = _ae_start,
+	.get_state = _get_state,
 	.toggle_ring_irq = _toggle_ring_irq,
 	.toggle_queue_status = _toggle_queue_status,
 };
@@ -1007,6 +1013,22 @@ void case_tx_poll_one(void) {
 	ut_assert(ret <0); //error
 }
 
+void case_change_mtu(void) {
+	int ret;
+	struct net_device ndev;
+
+	//test to pass
+	ae_env_init(800);
+	ret = hns_nic_change_mtu(&ndev, 1500);
+	ut_assert(!ret);
+}
+
+void case_service(void) {
+	int ret;
+
+	hns_nic_service_task(&priv1.service_task);
+}
+
 int main(void) {
 	test(100, case_test_hns_nic_net_xmit_hw);
 	test(200, case_probe);
@@ -1015,6 +1037,8 @@ int main(void) {
 	test(500, case_common_poll);
 	test(600, case_rx_poll_one);
 	test(700, case_tx_poll_one);
+	test(800, case_change_mtu);
+	test(900, case_service);
 	return 0;
 }
 

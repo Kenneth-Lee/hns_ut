@@ -144,6 +144,9 @@ int _set_opts(struct hnae_handle *handle, int type, void *opts) {
 int _get_opts(struct hnae_handle *handle, int type, void **opts) {
 	return 0;
 }
+int _get_state(struct hnae_handle *handle) {
+	return 0;
+}
 
 void _toggle_ring_irq(struct hnae_ring *ring, u32 val){}
 void _toggle_queue_status(struct hnae_queue *queue, u32 val){}
@@ -153,6 +156,7 @@ struct hnae_ae_ops ops = {
 	.put_handle = _put_handle,
 	.get_opts = _get_opts,
 	.set_opts = _set_opts,
+	.get_state = _get_state,
 	.toggle_ring_irq = _toggle_ring_irq,
 	.toggle_queue_status = _toggle_queue_status,
 };
