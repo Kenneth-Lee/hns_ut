@@ -260,8 +260,18 @@ static void netif_tx_lock(struct net_device *dev) {
 static void netif_tx_unlock(struct net_device *dev) {}
 void napi_complete(struct napi_struct *n) {}
 typedef irqreturn_t (*irq_handler_t)(int, void *);
+#define Q_NUM 4
+int request_irq_cnt = 0;
 static int request_irq(unsigned int irq, irq_handler_t handler, unsigned long flags,
             const char *name, void *dev) {
+	if(testcase==303)
+		if(request_irq_cnt++>2)
+			return -EIO;
+
+	if(testcase==304)
+		if(request_irq_cnt++>2+Q_NUM)
+			return -EIO;
+
 	return 0;
 }
 
@@ -343,7 +353,6 @@ static inline int netif_running(const struct net_device *dev)
 
 #include "hns_enet.c"
 
-#define Q_NUM 4
 #define BUFSIZE 12
 #define DESCNUM 10
 struct hnae_handle _handle;
@@ -362,6 +371,14 @@ int _get_opts(struct hnae_handle *handle, int type, void **opts) {
 	return 0;
 }
 
+int _ae_start(struct hnae_handle *handle) {
+	if(testcase==305)
+		return -EIO;
+
+	return 0;
+}
+
+
 void _toggle_ring_irq(struct hnae_ring *ring, u32 val){}
 void _toggle_queue_status(struct hnae_queue *queue, u32 val){}
 struct hnae_ae_ops _ops = {
@@ -369,6 +386,7 @@ struct hnae_ae_ops _ops = {
 	.put_handle = _put_handle,
 	.get_opts = _get_opts,
 	.set_opts = _set_opts,
+	.start = _ae_start,
 	.toggle_ring_irq = _toggle_ring_irq,
 	.toggle_queue_status = _toggle_queue_status,
 };
@@ -401,13 +419,35 @@ static void init_qs(void) {
 }
 
 void *netdev_priv(struct net_device *ndev) {
-	init_qs();	
 	return &priv1;
 }
 
-void hnae_put_handle(struct hnae_handle *handle) {};
+static int handle_cnt = 0;
+void ae_env_init(int tc) {
+	testcase = tc;
+	init_qs();	
+	priv1.ae_handle = &_handle;
+	_handle.dev = &ae_dev;
+	_handle.q_num = Q_NUM;
+	_handle.qs = pqs;
+	ae_dev.ops = &_ops;
+	handle_cnt = 0;
+	request_irq_cnt = 0;
+}
+
+void hnae_put_handle(struct hnae_handle *handle) {
+	ut_assert(handle);
+	ut_assert(!IS_ERR(handle));
+	handle_cnt--;
+}
 struct hnae_handle * hnae_get_handle(struct device * owner_dev,
         const char *ae_id, const char *ae_opts, struct hnae_buf_ops *bops) {
+
+	if(testcase==301)
+		return ERR_PTR(-EIO);
+
+	handle_cnt++;
+
 	init_qs();
 	return &_handle;
 }
@@ -452,7 +492,7 @@ void case_test_hns_nic_net_xmit_hw(void)
 	int i,j;
 
 #define reset(tc) do {\
-		testcase = tc;\
+		ae_env_init(tc);\
 		printf("testcase %d...\n", tc);\
 		ring_data.ring = &ring;\
 		ring_data.tx_err_cnt = 1;\
@@ -633,12 +673,14 @@ void case_probe(void) {
 	int ret;
 
 	//test to pass
+	ae_env_init(200);
 	ret = hns_nic_dev_probe(&dev);
 	ut_assert(!ret);
 	hns_nic_dev_remove(&dev);
 	ut_assert(!ret);
 
 	//todo: test to fail
+	ae_env_init(201);
 }
 
 void case_open(void) {
@@ -646,12 +688,43 @@ void case_open(void) {
 	struct net_device ndev;
 
 	//test to pass
+	ae_env_init(300);
 	ret = hns_nic_net_open(&ndev);
 	ut_assert(!ret);
 
 	ret = hns_nic_net_stop(&ndev);
 	ut_assert(!ret);
-	
+	ut_assert(!handle_cnt);
+
+	//get handle fail
+	ae_env_init(301);
+	ret = hns_nic_net_open(&ndev);
+	ut_assert_str(ret, "ret=%d\n", ret);
+
+	//too much q
+	ae_env_init(302);
+	_handle.q_num = NIC_MAX_Q_PER_VF +1;
+	ret = hns_nic_net_open(&ndev);
+	ut_assert_str(ret, "ret=%d\n", ret);
+	ut_assert(!handle_cnt);
+
+	//req irq fail, part 1
+	ae_env_init(303);
+	ret = hns_nic_net_open(&ndev);
+	ut_assert_str(ret, "ret=%d\n", ret);
+	ut_assert(!handle_cnt);
+
+	//req irq fail, part 2
+	ae_env_init(304);
+	ret = hns_nic_net_open(&ndev);
+	ut_assert_str(ret, "ret=%d\n", ret);
+	ut_assert(!handle_cnt);
+
+	//start fail
+	ae_env_init(305);
+	ret = hns_nic_net_open(&ndev);
+	ut_assert_str(ret, "ret=%d\n", ret);
+	ut_assert(!handle_cnt);
 }
 
 void case_set_mac(void) {
@@ -666,6 +739,7 @@ void case_set_mac(void) {
 	int ret;
 
 	//test to pass
+	ae_env_init(400);
 	ret = hns_nic_net_set_mac_address(&ndev, &sa);
 	ut_assert(!ret);
 }
